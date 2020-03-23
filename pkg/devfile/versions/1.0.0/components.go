@@ -24,3 +24,7 @@ func (d *Devfile100) GetAliasedComponents() []common.DevfileComponent {
 func (d *Devfile100) GetProjects() []common.DevfileProject {
 	return d.Projects
 }
+
+func (d *Devfile100) GetDevLocalInitCommands() []common.DevfileLocalInitCommand {
+	return d.DevLocalInitCommands
+}

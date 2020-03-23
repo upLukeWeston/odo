@@ -36,6 +36,8 @@ type Attributes map[string]string
 
 type ApiVersion string
 
+type DevfileLocalInitCommand string
+
 type DevfileMetadata struct {
 
 	// Workspaces created from devfile, will use it as base and append random suffix.

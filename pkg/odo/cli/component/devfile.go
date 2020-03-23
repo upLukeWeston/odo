@@ -97,3 +97,20 @@ func getComponentName() (string, error) {
 	retVal = util.TruncateString(retVal, componentNameMaxLen)
 	return retVal, nil
 }
+
+func (co *CreateOptions) runDevLocalInitCommands() error {
+	// obj, err := versions.NewDevfileData("1.0.0")
+	// if err != nil {
+	// 	log.Error(err)
+	// }
+	// log.Info(obj)
+
+	devObj, err := devfile.Parse(co.devfilePath)
+	if err != nil {
+		return err
+	}
+
+	commands := devObj.Data.GetDevLocalInitCommands()
+	log.Info(commands)
+	return nil
+}

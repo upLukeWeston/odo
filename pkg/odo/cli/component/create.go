@@ -22,6 +22,7 @@ import (
 	"github.com/openshift/odo/pkg/odo/genericclioptions"
 	odoutil "github.com/openshift/odo/pkg/odo/util"
 	"github.com/openshift/odo/pkg/odo/util/completion"
+	"github.com/openshift/odo/pkg/odo/util/experimental"
 	"github.com/openshift/odo/pkg/util"
 
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,8 @@ type CreateOptions struct {
 	interactive       bool
 	now               bool
 	*CommonPushOptions
+	// devfile path
+	devfilePath string
 }
 
 // CreateRecommendedCommandName is the recommended watch command name
@@ -477,6 +480,9 @@ func (co *CreateOptions) Validate() (err error) {
 
 // Run has the logic to perform the required actions as part of command
 func (co *CreateOptions) Run() (err error) {
+
+	_ = co.runDevLocalInitCommands()
+
 	err = co.LocalConfigInfo.SetComponentSettings(co.componentSettings)
 	if err != nil {
 		return errors.Wrapf(err, "failed to persist the component settings to config file")
@@ -554,6 +560,10 @@ func NewCmdCreate(name, fullName string) *cobra.Command {
 	componentCreateCmd.Flags().StringVar(&co.cpuMax, "max-cpu", "", "Limit maximum amount of cpu to be allocated to the component. ex. 1")
 	componentCreateCmd.Flags().StringSliceVarP(&co.componentPorts, "port", "p", []string{}, "Ports to be used when the component is created (ex. 8080,8100/tcp,9100/udp)")
 	componentCreateCmd.Flags().StringSliceVar(&co.componentEnvVars, "env", []string{}, "Environmental variables for the component. For example --env VariableName=Value")
+
+	if experimental.IsExperimentalModeEnabled() {
+		componentCreateCmd.Flags().StringVar(&co.devfilePath, "devfile", "./devfile.yaml", "Path to a devfile.yaml")
+	}
 
 	componentCreateCmd.SetUsageTemplate(odoutil.CmdUsageTemplate)
 

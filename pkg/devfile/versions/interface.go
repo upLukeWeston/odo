@@ -8,4 +8,5 @@ type DevfileData interface {
 	GetComponents() []common.DevfileComponent
 	GetAliasedComponents() []common.DevfileComponent
 	GetProjects() []common.DevfileProject
+	GetDevLocalInitCommands() []common.DevfileLocalInitCommand
 }
