@@ -3,11 +3,11 @@ package component
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	"github.com/openshift/odo/pkg/devfile"
-
 	"github.com/openshift/odo/pkg/devfile/adapters"
 	"github.com/openshift/odo/pkg/devfile/adapters/kubernetes"
 	"github.com/openshift/odo/pkg/log"
@@ -98,19 +98,39 @@ func getComponentName() (string, error) {
 	return retVal, nil
 }
 
-func (co *CreateOptions) runDevLocalInitCommands() error {
-	// obj, err := versions.NewDevfileData("1.0.0")
-	// if err != nil {
-	// 	log.Error(err)
-	// }
-	// log.Info(obj)
-
+// DevfilePush has the logic to perform the required actions for a given devfile
+func (co *CreateOptions) DevfileCreate() error {
 	devObj, err := devfile.Parse(co.devfilePath)
 	if err != nil {
 		return err
 	}
 
+	runDevLocalInitCommands(devObj)
+}
+
+/*
+ * runDevLocalInitCommands
+ */
+func runDevLocalInitCommands(devObj devfile.DevfileObj) error {
 	commands := devObj.Data.GetDevLocalInitCommands()
-	log.Info(commands)
+	for _, command := range commands {
+		values := strings.Split(string(command), " ")
+		if len(values) < 1 {
+			return errors.New("Blank dev local init command not allowed")
+		}
+
+		args := []string{}
+		if len(values) > 1 {
+			args = append(args, values[1:]...)
+		}
+
+		cmd := exec.Command(values[0], args...)
+		err := cmd.Run()
+		if err != nil {
+			return err
+		}
+		log.Infof("Command `%s %s`", values[0], strings.Trim(fmt.Sprint(args), "[]"))
+	}
+
 	return nil
 }

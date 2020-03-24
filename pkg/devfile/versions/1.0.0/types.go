@@ -13,7 +13,7 @@ type Devfile100 struct {
 	// Devfile section "metadata"
 	Metadata common.DevfileMetadata `yaml:"metadata" json:"metadata"`
 
-	DevLocalInitCommands []common.DevfileLocalInitCommand `yaml:"devLocalInit,omitempty" json:"devLocalInit,omitempty`
+	DevLocalInit []common.DevfileLocalInitCommand `yaml:"devLocalInit,omitempty" json:"devLocalInit,omitempty`
 
 	// Devfile section projects
 	Projects []common.DevfileProject `yaml:"projects,omitempty" json:"projects,omitempty"`

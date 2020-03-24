@@ -26,5 +26,5 @@ func (d *Devfile100) GetProjects() []common.DevfileProject {
 }
 
 func (d *Devfile100) GetDevLocalInitCommands() []common.DevfileLocalInitCommand {
-	return d.DevLocalInitCommands
+	return d.DevLocalInit
 }

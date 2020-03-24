@@ -480,8 +480,11 @@ func (co *CreateOptions) Validate() (err error) {
 
 // Run has the logic to perform the required actions as part of command
 func (co *CreateOptions) Run() (err error) {
-
-	_ = co.runDevLocalInitCommands()
+	// if experimental mode is enabled, use devfile create
+	if experimental.IsExperimentalModeEnabled() && util.CheckPathExists(co.devfilePath) {
+		// devfile create
+		return co.DevfileCreate()
+	}
 
 	err = co.LocalConfigInfo.SetComponentSettings(co.componentSettings)
 	if err != nil {

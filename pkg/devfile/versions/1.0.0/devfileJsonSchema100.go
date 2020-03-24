@@ -1,5 +1,6 @@
 package version100
 
+// TODO: Add example to devlocalinit field
 const JsonSchema100 = `{
     "meta:license": [
         " Copyright (c) 2012-2019 Red Hat, Inc.",
@@ -74,6 +75,16 @@ const JsonSchema100 = `{
                 }
             ]
         },
+				"devLocalInit": {
+            "type": "array",
+            "title": "The Projects List",
+            "description": "Description of the projects, containing names and sources locations",
+            "items": {
+                "type": "string",
+								"title": "command"
+								
+						}
+				},
         "projects": {
             "type": "array",
             "title": "The Projects List",
