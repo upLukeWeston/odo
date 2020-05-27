@@ -27,21 +27,26 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 		if commandName != "" {
 
 			if command.Exec.Id == commandName {
+				// In the case of lifecycle events, we don't have the type, only the name
+				// This will verify that if a groupType is passed, the command extracted matches that groupType
+				if groupType != "" {
 
-				if command.Exec.Group.Kind == "" {
-					// Devfile V1 for commands passed from flags
-					// Group type is not updated during conversion
-					command.Exec.Group.Kind = groupType
-				}
+					if command.Exec.Group.Kind == "" {
+						// Devfile V1 for commands passed from flags
+						// Group type is not updated during conversion
+						command.Exec.Group.Kind = groupType
+					}
 
-				// we have found the command with name, its groupType Should match to the flag
-				// e.g --build-command "mybuild"
-				// exec:
-				//   id: mybuild
-				// group:
-				//   kind: build
-				if command.Exec.Group.Kind != groupType {
-					return supportedCommand, fmt.Errorf("mismatched type, command %s is of type %v groupType in devfile", commandName, groupType)
+					// we have found the command with name, its groupType Should match to the flag
+					// e.g --build-command "mybuild"
+					// exec:
+					//   id: mybuild
+					// group:
+					//   kind: build
+					if command.Exec.Group.Kind != groupType {
+						return supportedCommand, fmt.Errorf("mismatched type, command %s is of type %v groupType in devfile", commandName, groupType)
+
+					}
 
 				}
 				supportedCommand = command
@@ -131,6 +136,10 @@ func validateCommand(data data.DevfileData, command common.DevfileCommand) (err 
 func GetInitCommand(data data.DevfileData, devfileInitCmd string) (initCommand common.DevfileCommand, err error) {
 
 	return getCommand(data, devfileInitCmd, common.InitCommandGroupType)
+}
+
+func GetCommandByName(data data.DevfileData, postStartCommand string) (command common.DevfileCommand, err error) {
+	return getCommand(data, postStartCommand, "")
 }
 
 // GetBuildCommand iterates through the components in the devfile and returns the build command
