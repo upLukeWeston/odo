@@ -770,13 +770,14 @@ func (co *CreateOptions) downloadProject(projectPassed string) error {
 		return err
 	}
 
-	var url string
+	var url, sparseDir string
 	if project.Git != nil {
 		if strings.Contains(project.Git.Location, "github.com") {
 			url, err = util.GetGitHubZipURL(project.Git.Location)
 			if err != nil {
 				return err
 			}
+			sparseDir = project.Git.SparseCheckoutDir
 		} else {
 			return errors.Errorf("Project type git with non github url not supported")
 		}
@@ -785,13 +786,16 @@ func (co *CreateOptions) downloadProject(projectPassed string) error {
 		if err != nil {
 			return err
 		}
+		sparseDir = project.Github.SparseCheckoutDir
 	} else if project.Zip != nil {
 		url = project.Zip.Location
+		sparseDir = project.Github.SparseCheckoutDir
 	} else {
 		return errors.Errorf("Project type not supported")
 	}
 
-	err = util.GetAndExtractZip(url, path)
+	err = checkoutProject(sparseDir, url, path)
+
 	if err != nil {
 		return err
 	}
@@ -901,6 +905,23 @@ func ensureAndLogProperResourceUsage(resource, resourceMin, resourceMax, resourc
 		log.Errorf("`--min-%s` should accompany `--max-%s` or pass `--%s` to use same value for both min and max or try not passing any of them\n", resourceName, resourceName, resourceName)
 		os.Exit(1)
 	}
+}
+
+func checkoutProject(sparseCheckoutDir, zipURL, path string) error {
+
+	if sparseCheckoutDir != "" {
+		err := util.GetAndExtractZip(zipURL, path, sparseCheckoutDir)
+		if err != nil {
+			return errors.Wrap(err, "failed to download and extract project zip folder")
+		}
+	} else {
+		// extract project to current working directory
+		err := util.GetAndExtractZip(zipURL, path, "/")
+		if err != nil {
+			return errors.Wrap(err, "failed to download and extract project zip folder")
+		}
+	}
+	return nil
 }
 
 // NewCmdCreate implements the create odo command
