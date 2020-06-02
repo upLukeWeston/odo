@@ -64,6 +64,9 @@ type DevfileCommand struct {
 	// Exec command
 	Exec *Exec `json:"exec,omitempty"`
 
+	// Composite command
+	Composite *Composite `json:"composite,omitempty"`
+
 	// Type of workspace command
 	Type DevfileCommandType `json:"type,omitempty"`
 }

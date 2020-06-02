@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/odo/pkg/devfile/adapters/common"
 	"github.com/openshift/odo/pkg/devfile/adapters/docker/storage"
 	"github.com/openshift/odo/pkg/devfile/adapters/docker/utils"
+	parserCommon "github.com/openshift/odo/pkg/devfile/parser/data/common"
 	"github.com/openshift/odo/pkg/exec"
 	"github.com/openshift/odo/pkg/lclient"
 	"github.com/openshift/odo/pkg/log"
@@ -120,27 +121,42 @@ func (a Adapter) Push(parameters common.PushParameters) (err error) {
 	}
 
 	if !componentExists {
+		s = log.SpinnerNoSpin("Component doesn't exist")
+		s.End(true)
+
 		events := a.Devfile.Data.GetEvents()
 		if len(events.PostStart) > 0 {
+			s = log.SpinnerNoSpin(fmt.Sprint("There are ", len(events.PostStart), " events"))
+			s.End(true)
 			for _, postCommand := range events.PostStart {
 				// Get command
 				command, err := common.GetCommandByName(a.Devfile.Data, postCommand)
 				if err != nil {
 
 				}
-				// Get container for command
-				containerID := utils.GetContainerIDForAlias(containers, command.Exec.Component)
-				compInfo := common.ComponentInfo{ContainerName: containerID}
-				// Execute command in container
 
-				// If composite would go here & recursive loop
+				if command.Exec != nil {
+					// Get container for command
+					containerID := utils.GetContainerIDForAlias(containers, command.Exec.Component)
+					compInfo := common.ComponentInfo{ContainerName: containerID}
 
-				err = exec.ExecuteDevfileBuildAction(&a.Client, *command.Exec, command.Exec.Id, compInfo, false)
-				if err != nil {
-					return err
+					// Execute command in container
+					err = exec.ExecuteDevfileBuildAction(&a.Client, *command.Exec, command.Exec.Id, compInfo, false)
+					if err != nil {
+						return err
+					}
+				}
+
+				if command.Composite != nil {
+					s = log.SpinnerNoSpin("I'm executing composite commands for the first time")
+					s.End(true)
+					return ExecuteCompositeCommands(a, command, containers)
 				}
 			}
 		}
+	} else {
+		s = log.SpinnerNoSpin("Component exists?")
+		s.End(true)
 	}
 
 	if execRequired {
@@ -152,6 +168,38 @@ func (a Adapter) Push(parameters common.PushParameters) (err error) {
 	}
 
 	return nil
+}
+
+func ExecuteCompositeCommands(adapter Adapter, command parserCommon.DevfileCommand, containers []types.Container) (err error) {
+	s := log.SpinnerNoSpin(fmt.Sprint("There are ", len(command.Composite.Commands), " commands to execute"))
+	s.End(true)
+	for _, compositeCommand := range command.Composite.Commands {
+		cmd, err := common.GetCommandByName(adapter.Devfile.Data, compositeCommand)
+		if err != nil {
+
+		}
+
+		var s *log.Status
+		if command.Exec != nil {
+			s = log.SpinnerNoSpin("Executing exec command")
+			// Get container for command
+			containerID := utils.GetContainerIDForAlias(containers, cmd.Exec.Component)
+			compInfo := common.ComponentInfo{ContainerName: containerID}
+			s.End(true)
+			// Execute command in container
+			err = exec.ExecuteDevfileBuildAction(&adapter.Client, *cmd.Exec, cmd.Exec.Id, compInfo, false)
+			if err != nil {
+				return err
+			}
+		}
+
+		if cmd.Composite != nil {
+			s = log.SpinnerNoSpin("Command is composite")
+			s.End(true)
+			return ExecuteCompositeCommands(adapter, cmd, containers)
+		}
+	}
+	return
 }
 
 // DoesComponentExist returns true if a component with the specified name exists, false otherwise

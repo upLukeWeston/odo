@@ -19,7 +19,7 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 		command = updateGroupforCustomCommand(commandName, groupType, command)
 
 		// validate command
-		err = validateCommand(data, command)
+		err := validateCommand(data, command)
 
 		if err != nil {
 			return common.DevfileCommand{}, err
@@ -29,8 +29,7 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 		// search through all commands to find the specified command name
 		// if not found fallback to error.
 		if commandName != "" {
-
-			if command.Exec.Id == commandName {
+			if command.Exec != nil && command.Exec.Id == commandName {
 				// In the case of lifecycle events, we don't have the type, only the name
 				// This will verify that if a groupType is passed, the command extracted matches that groupType
 				if groupType != "" {
@@ -55,13 +54,16 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 				}
 				supportedCommand = command
 				return supportedCommand, nil
+			} else if command.Composite != nil && command.Composite.Id == commandName {
+				supportedCommand = command
+				return supportedCommand, nil
 			}
 			continue
 		}
 
 		// if not command specified via flag, default command has the highest priority
 		// We need to scan all the commands to find default command
-		if command.Exec.Group.Kind == groupType && command.Exec.Group.IsDefault {
+		if command.Exec != nil && command.Exec.Group.Kind == groupType && command.Exec.Group.IsDefault {
 			supportedCommand = command
 			return supportedCommand, nil
 		}
@@ -70,11 +72,13 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 	if commandName == "" {
 		// if default command is not found return the first command found for the matching type.
 		for _, command := range commands {
-			if command.Exec.Group.Kind == groupType {
+			if command.Exec != nil && command.Exec.Group.Kind == groupType {
+				supportedCommand = command
+				return supportedCommand, nil
+			} else if command.Composite != nil && command.Composite.Group.Kind == groupType {
 				supportedCommand = command
 				return supportedCommand, nil
 			}
-
 		}
 	}
 
@@ -103,10 +107,26 @@ func getCommand(data data.DevfileData, commandName string, groupType common.Devf
 func validateCommand(data data.DevfileData, command common.DevfileCommand) (err error) {
 
 	// type must be exec
-	if command.Exec == nil {
-		return fmt.Errorf("Command must be of type \"exec\"")
+	if command.Exec != nil && command.Composite == nil {
+		return checkExecCommand(data, command)
 	}
 
+	if command.Exec == nil && command.Composite != nil {
+		return checkRecursiveCommand(data, command)
+	}
+
+	if command.Exec == nil && command.Composite == nil {
+		return fmt.Errorf("Command must be either \"exec\" or \"composite\"")
+	}
+
+	if command.Exec != nil && command.Composite != nil {
+		return fmt.Errorf("Command must be either \"exec\" or \"composite\"")
+	}
+
+	return
+}
+
+func checkExecCommand(data data.DevfileData, command common.DevfileCommand) (err error) {
 	// component must be specified
 	if command.Exec.Component == "" {
 		return fmt.Errorf("Exec commands must reference a component")
@@ -133,6 +153,27 @@ func validateCommand(data data.DevfileData, command common.DevfileCommand) (err 
 	if !isComponentValid {
 		return fmt.Errorf("the command does not map to a supported component")
 	}
+	return
+}
+
+// events: -> post start -> [strings]
+// Top level function accepts: [StringCommand, StringCommand, StringCommand] ---> getCommand(StringCommand) iterates over all the commands and returns the command struct
+// if getCommand returns a composite command call the top level function with the array of commands
+//
+func checkRecursiveCommand(data data.DevfileData, command common.DevfileCommand) (err error) {
+
+	if len(command.Composite.Commands) > 0 {
+		for _, cmd := range command.Composite.Commands {
+			compositeCommand, err := GetCommandByName(data, cmd)
+			if err != nil {
+				return err
+			}
+			err = validateCommand(data, compositeCommand)
+			if err != nil {
+				return err
+			}
+		}
+	}
 
 	return
 }
@@ -144,6 +185,7 @@ func GetInitCommand(data data.DevfileData, devfileInitCmd string) (initCommand c
 }
 
 func GetCommandByName(data data.DevfileData, postStartCommand string) (command common.DevfileCommand, err error) {
+
 	return getCommand(data, postStartCommand, "")
 }
 
@@ -226,6 +268,11 @@ func updateGroupforCustomCommand(commandName string, groupType common.DevfileCom
 	// Update Group only when Group is not nil, devfile v2 might contain group for custom commands.
 	if command.Exec != nil && commandName != "" && command.Exec.Group == nil {
 		command.Exec.Group = &common.Group{Kind: groupType}
+		return command
+	}
+
+	if command.Composite != nil && commandName != "" && command.Composite.Group == nil {
+		command.Composite.Group = &common.Group{Kind: groupType}
 		return command
 	}
 	return command
