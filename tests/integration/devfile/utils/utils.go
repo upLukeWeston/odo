@@ -33,8 +33,10 @@ func ExecDefaultDevfileCommands(projectDirPath, cmpName, namespace string) {
 	args = []string{"push", "--devfile", "devfile.yaml"}
 	args = useProjectIfAvailable(args, namespace)
 	output := helper.CmdShouldPass("odo", args...)
-	Expect(output).To(ContainSubstring("Executing devbuild command \"/artifacts/bin/build-container-full.sh\""))
-	Expect(output).To(ContainSubstring("Executing devrun command \"/artifacts/bin/start-server.sh\""))
+	helper.MatchAllInOutput(output, []string{
+		"Executing devbuild command \"/artifacts/bin/build-container-full.sh\"",
+		"Executing devrun command \"/artifacts/bin/start-server.sh\"",
+	})
 }
 
 // ExecWithMissingBuildCommand executes odo push with a missing build command
@@ -69,7 +71,7 @@ func ExecWithMissingRunCommand(projectDirPath, cmpName, namespace string) {
 	args = useProjectIfAvailable(args, namespace)
 	output := helper.CmdShouldFail("odo", args...)
 	Expect(output).NotTo(ContainSubstring("Executing devrun command"))
-	Expect(output).To(ContainSubstring("The command type \"run\" is not found in the devfile"))
+	Expect(output).To(ContainSubstring("the command type \"run\" is not found in the devfile"))
 }
 
 // ExecWithCustomCommand executes odo push with a custom command
@@ -84,8 +86,10 @@ func ExecWithCustomCommand(projectDirPath, cmpName, namespace string) {
 	args = []string{"push", "--devfile", "devfile.yaml", "--build-command", "build", "--run-command", "run"}
 	args = useProjectIfAvailable(args, namespace)
 	output := helper.CmdShouldPass("odo", args...)
-	Expect(output).To(ContainSubstring("Executing build command \"npm install\""))
-	Expect(output).To(ContainSubstring("Executing run command \"nodemon app.js\""))
+	helper.MatchAllInOutput(output, []string{
+		"Executing build command \"npm install\"",
+		"Executing run command \"nodemon app.js\"",
+	})
 }
 
 // ExecWithWrongCustomCommand executes odo push with a wrong custom command
@@ -103,7 +107,7 @@ func ExecWithWrongCustomCommand(projectDirPath, cmpName, namespace string) {
 	args = useProjectIfAvailable(args, namespace)
 	output := helper.CmdShouldFail("odo", args...)
 	Expect(output).NotTo(ContainSubstring("Executing buildgarbage command"))
-	Expect(output).To(ContainSubstring("The command \"%v\" is not found in the devfile", garbageCommand))
+	Expect(output).To(ContainSubstring("the command \"%v\" is not found in the devfile", garbageCommand))
 }
 
 // ExecPushToTestFileChanges executes odo push with and without a file change
