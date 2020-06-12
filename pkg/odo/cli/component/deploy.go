@@ -40,6 +40,7 @@ type DeployOptions struct {
 	DockerfilePath string
 	namespace      string
 	tag            string
+	ManifestSource []byte
 }
 
 // NewDeployOptions returns new instance of BuildOptions
@@ -81,6 +82,12 @@ func (do *DeployOptions) Run() (err error) {
 	localDir, err := os.Getwd()
 	if err != nil {
 		return err
+	}
+
+	manifestURL := metadata.Manifest
+	do.ManifestSource, err = util.DownloadFileInMemory(manifestURL)
+	if err != nil {
+		return errors.Wrap(err, "Unable to download manifest "+manifestURL)
 	}
 
 	//Download Dockerfile to .odo, build, then delete from .odo dir
@@ -125,11 +132,6 @@ func (do *DeployOptions) Run() (err error) {
 	} else if !util.CheckPathExists(filepath.Join(localDir, "Dockerfile")) {
 		return errors.New("dockerfile required for build. No 'dockerfile' field found in devfile, or Dockerfile found in project directory")
 	}
-
-	// TODO:
-	//    - Parse devfile and extract Dockerfile and manifest information
-	//    - Pull dockerfile into memory
-	//	  - Common parsing here
 
 	do.DockerfilePath = dockerfilePath
 	err = do.DevfileBuild()
