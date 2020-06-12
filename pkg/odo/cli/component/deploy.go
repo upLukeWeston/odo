@@ -1,12 +1,15 @@
 package component
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	devfileParser "github.com/openshift/odo/pkg/devfile/parser"
 	"github.com/openshift/odo/pkg/envinfo"
+	"github.com/openshift/odo/pkg/log"
 	projectCmd "github.com/openshift/odo/pkg/odo/cli/project"
 	"github.com/openshift/odo/pkg/odo/genericclioptions"
 	"github.com/openshift/odo/pkg/odo/util/completion"
@@ -17,7 +20,6 @@ import (
 
 	odoutil "github.com/openshift/odo/pkg/odo/util"
 
-	"k8s.io/klog"
 	ktemplates "k8s.io/kubectl/pkg/util/templates"
 )
 
@@ -86,8 +88,8 @@ func (do *DeployOptions) Run() (err error) {
 	//If Dockerfile is present in the project and field is in devfile, build the one already in the project and warn the user.
 	if dockerfileURL != "" && util.CheckPathExists(filepath.Join(localDir, "Dockerfile")) {
 		// TODO: make clearer more visible output
-		klog.Warning("Dockerfile already exists in project directory and one is specified in Devfile.")
-		klog.Warningf("Using Dockerfile specified in devfile from %s", dockerfileURL)
+		log.Warning("Dockerfile already exists in project directory and one is specified in Devfile.")
+		log.Warningf("Using Dockerfile specified in devfile from '%s'", dockerfileURL)
 	}
 
 	if !util.CheckPathExists(filepath.Join(localDir, ".odo")) {
@@ -97,9 +99,31 @@ func (do *DeployOptions) Run() (err error) {
 	if dockerfileURL != "" {
 		err = util.DownloadFile(dockerfileURL, filepath.Join(localDir, ".odo", "Dockerfile"))
 		if err != nil {
-			return err
+			return errors.Wrap(err, "unable to download Dockerfile from URL specified in devfile")
 		}
 		dockerfilePath = filepath.Join(".odo", "Dockerfile")
+
+		file, err := os.Open(dockerfilePath)
+		if err != nil {
+			return errors.New("unable to read Dockerfile")
+		}
+		scanner := bufio.NewScanner(file)
+		scanner.Split(bufio.ScanLines)
+
+		for scanner.Scan() {
+			if strings.HasPrefix(scanner.Text(), "#") {
+				continue
+			}
+			if strings.HasPrefix(scanner.Text(), "FROM") {
+				break
+			}
+			file.Close()
+			return errors.Errorf("%s does not point to a valid Dockerfile", dockerfileURL)
+		}
+		file.Close()
+
+	} else if !util.CheckPathExists(filepath.Join(localDir, "Dockerfile")) {
+		return errors.New("dockerfile required for build. No 'dockerfile' field found in devfile, or Dockerfile found in project directory")
 	}
 
 	// TODO:
