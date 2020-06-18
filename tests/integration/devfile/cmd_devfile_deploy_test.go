@@ -25,7 +25,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 		helper.CmdShouldPass("odo", "preference", "set", "Experimental", "true")
 
 		originalKubeconfig = os.Getenv("KUBECONFIG")
-		imageTag = "image-registry.openshift-image-registry.svc:5000/build-nodejs/image:1.0"
+		imageTag = "image-registry.openshift-image-registry.svc:5000/default/my-nodejs:1.0"
 		helper.LocalKubeconfigSet(context)
 		namespace = cliRunner.CreateRandNamespaceProject()
 		currentWorkingDirectory = helper.Getwd()
@@ -45,6 +45,8 @@ var _ = Describe("odo devfile deploy command tests", func() {
 	Context("Verify dockerfile specified in devfile field points to valid Dockerfile", func() {
 		It("Should succesfully download the dockerfile and build the project", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
+			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
+
 			helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
 			output := helper.CmdShouldPass("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")
 			Expect(output).NotTo(ContainSubstring("does not point to a valid Dockerfile"))
@@ -54,6 +56,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 	Context("Verify error when dockerfile specified in devfile field points to a file that isn't a Dockerfile", func() {
 		It("Should error out with 'URL does not point to a valid Dockerfile'", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
+			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
 			helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
 
 			err := helper.ReplaceDevfileField("devfile.yaml", "dockerfile", "https://google.com")
@@ -64,23 +67,10 @@ var _ = Describe("odo devfile deploy command tests", func() {
 		})
 	})
 
-	// Context("Verify error when dockerfile specified in devfile field points to a file that doesn't exist", func() {
-	// 	It("Should error out with 'unable to download Dockerfile from URL specified in devfile'", func() {
-	// 		helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
-	// 		helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
-
-	// 		err := helper.ReplaceDevfileField("devfile.yaml", "dockerfile", "https://invalid.url/should/not/pass")
-	// 		Expect(err).To(BeNil())
-
-	// 		cmdOutput := helper.CmdShouldFail("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")
-	// 		Expect(cmdOutput).To(ContainSubstring("unable to download Dockerfile from URL specified in devfile"))
-	// 	})
-	// })
-
 	Context("Verify error when no Dockerfile exists in project and no 'dockerfile' specified in devfile", func() {
 		It("Should error out with 'dockerfile required for build.'", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
-
+			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
 			cmdOutput := helper.CmdShouldFail("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")
 			Expect(cmdOutput).To(ContainSubstring("dockerfile required for build. No 'dockerfile' field found in devfile, or Dockerfile found in project directory"))
 		})
@@ -89,6 +79,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 	Context("Verify warning when Dockerfile is present in the project directory and has been specified in the Devfile", func() {
 		It("Should build the project using the Dockerfile specified in the devfile", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
+			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
 			helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
 			helper.CmdShouldPass("touch", "Dockerfile")
 			helper.CmdShouldPass("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")

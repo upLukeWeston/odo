@@ -46,15 +46,14 @@ func (a Adapter) SyncFilesBuild(buildParameters common.BuildParameters, compInfo
 	s = log.Spinner("Checking files for deploy")
 	// run the indexer and find the modified/added/deleted/renamed files
 	files, _, err := util.RunIndexer(buildParameters.Path, absIgnoreRules)
-
-	// We will also need to copy the dockerfile if we are using one specified in the devfile
-	if buildParameters.DockerfilePath != "" {
-		files = append(files, ".odo/Dockerfile")
-	}
+	// TODO just get all the files that obey to the absIgnoreRules (.odo, blah)
 
 	if len(files) > 0 {
 		klog.V(4).Infof("Copying files %s to pod", strings.Join(files, " "))
-		err = CopyFile(a.Client, buildParameters.Path, compInfo, syncFolder, files, absIgnoreRules)
+		dockerfile := map[string][]byte{
+			"Dockerfile": buildParameters.DockerfileBytes,
+		}
+		err = CopyFile(a.Client, buildParameters.Path, compInfo, syncFolder, files, absIgnoreRules, dockerfile)
 		if err != nil {
 			s.End(false)
 			return syncFolder, errors.Wrap(err, "unable push files to pod")
@@ -223,7 +222,7 @@ func (a Adapter) pushLocal(path string, files []string, delFiles []string, isFor
 
 	if isForcePush || len(files) > 0 {
 		klog.V(4).Infof("Copying files %s to pod", strings.Join(files, " "))
-		err = CopyFile(a.Client, path, compInfo, syncFolder, files, globExps)
+		err = CopyFile(a.Client, path, compInfo, syncFolder, files, globExps, map[string][]byte{})
 		if err != nil {
 			s.End(false)
 			return errors.Wrap(err, "unable push files to pod")

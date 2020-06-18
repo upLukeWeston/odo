@@ -1690,3 +1690,36 @@ func TestSliceContainsString(t *testing.T) {
 		})
 	}
 }
+
+func TestDownloadInMemory(t *testing.T) {
+	tests := []struct {
+		name string
+		url  string
+		want bool
+	}{
+		{
+			name: "Test download into memory with a valid URL",
+			url:  "https://github.com/openshift/odo/blob/master/tests/examples/source/devfiles/nodejs/devfile.yaml",
+			want: true,
+		},
+		{
+			name: "Test download into memory with an invalid URL",
+			url:  "https://this/is/not/a/valid/url",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := DownloadFileInMemory(tt.url)
+
+			got := err == nil
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Got: %v, want: %v", got, tt.want)
+				t.Logf("Error message is: %v", err)
+			}
+		})
+	}
+}

@@ -1,10 +1,10 @@
 package component
 
 import (
-	"bufio"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	devfileParser "github.com/openshift/odo/pkg/devfile/parser"
@@ -36,11 +36,12 @@ type DeployOptions struct {
 	*CommonPushOptions
 
 	// devfile path
-	DevfilePath    string
-	DockerfilePath string
-	namespace      string
-	tag            string
-	ManifestSource []byte
+	DevfilePath     string
+	DockerfileURL   string
+	DockerfileBytes []byte
+	namespace       string
+	tag             string
+	ManifestSource  []byte
 }
 
 // NewDeployOptions returns new instance of BuildOptions
@@ -66,7 +67,23 @@ func (do *DeployOptions) Complete(name string, cmd *cobra.Command, args []string
 
 // Validate validates the push parameters
 func (do *DeployOptions) Validate() (err error) {
-	// TODO: Validate the value of tag and any user parameteres.
+	var splitTag = strings.Split(do.tag, "/")
+	if len(splitTag) != 3 {
+		return errors.New("invalid tag: odo deploy reguires a tag in the format <registry>/namespace>/<image>")
+	}
+
+	characterMatch := regexp.MustCompile(`[a-zA-Z0-9\.\-:]*`)
+
+	for _, element := range splitTag {
+		elementMatch := characterMatch.MatchString(element)
+		if !elementMatch {
+			return errors.New("invalid tag: " + element + " in the tag contains an illegal character. It must only contain alphanumerical values, periods, colons, and dashes.")
+		}
+		if strings.HasSuffix(element, ".") || strings.HasSuffix(element, "-") || strings.HasSuffix(element, ":") {
+			return errors.New("invalid tag: " + element + " in the tag has an invalid final character. It must end in an alphanumeric value.")
+		}
+	}
+
 	return
 }
 
@@ -78,7 +95,6 @@ func (do *DeployOptions) Run() (err error) {
 	}
 	metadata := devObj.Data.GetMetadata()
 	dockerfileURL := metadata.Dockerfile
-	dockerfilePath := "./Dockerfile"
 	localDir, err := os.Getwd()
 	if err != nil {
 		return err
@@ -104,36 +120,28 @@ func (do *DeployOptions) Run() (err error) {
 	}
 
 	if dockerfileURL != "" {
-		err = util.DownloadFile(dockerfileURL, filepath.Join(localDir, ".odo", "Dockerfile"))
+		dockerfileBytes, err := util.DownloadFileInMemory(dockerfileURL)
 		if err != nil {
-			return errors.Wrap(err, "unable to download Dockerfile from URL specified in devfile")
+			return errors.New("unable to download Dockerfile from URL specified in devfile")
 		}
-		dockerfilePath = filepath.Join(".odo", "Dockerfile")
+		do.DockerfileURL = dockerfileURL
+		do.DockerfileBytes = dockerfileBytes
 
-		file, err := os.Open(dockerfilePath)
-		if err != nil {
-			return errors.New("unable to read Dockerfile")
-		}
-		scanner := bufio.NewScanner(file)
-		scanner.Split(bufio.ScanLines)
-
-		for scanner.Scan() {
-			if strings.HasPrefix(scanner.Text(), "#") {
+		dockerfileStrings := strings.Split(string(dockerfileBytes), "\n")
+		for _, line := range dockerfileStrings {
+			if strings.HasPrefix(line, "#") {
 				continue
 			}
-			if strings.HasPrefix(scanner.Text(), "FROM") {
+			if strings.HasPrefix(line, "FROM") {
 				break
 			}
-			file.Close()
 			return errors.Errorf("%s does not point to a valid Dockerfile", dockerfileURL)
 		}
-		file.Close()
 
 	} else if !util.CheckPathExists(filepath.Join(localDir, "Dockerfile")) {
 		return errors.New("dockerfile required for build. No 'dockerfile' field found in devfile, or Dockerfile found in project directory")
 	}
 
-	do.DockerfilePath = dockerfilePath
 	err = do.DevfileBuild()
 	if err != nil {
 		return err
