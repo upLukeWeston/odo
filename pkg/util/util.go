@@ -1058,6 +1058,31 @@ func ValidateURL(sourceURL string) error {
 	return nil
 }
 
+// ValidateDockerfile validates the string passed through has a FROM on it's first non-whitespace/commented line
+// This function could be expanded to be a more viable linter
+func ValidateDockerfile(contents []byte) error {
+	// Split the file downloaded line-by-line
+	splitContents := strings.Split(string(contents), "\n")
+	// The first line in a Dockerfile must be a 'FROM', whitespace, or a comment ('#')
+	// If it there is whitespace, or there are comments, keep checking until we find either a FROM, or something else
+	// If there is something other than a FROM, the file downloaded wasn't a valid Dockerfile
+	for _, line := range splitContents {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "FROM") {
+			return nil
+		}
+		return errors.Errorf("dockerfile URL provided in the Devfile does not point to a valid Dockerfile")
+	}
+	// Would only reach this return statement if splitContents is 0
+	return errors.Errorf("dockerfile URL provided in the Devfile does not point to a valid Dockerfile")
+}
+
 // sliceContainsString checks for existence of given string in given slice
 func sliceContainsString(str string, slice []string) bool {
 	for _, b := range slice {

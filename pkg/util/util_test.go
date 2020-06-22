@@ -1698,12 +1698,12 @@ func TestDownloadInMemory(t *testing.T) {
 		want bool
 	}{
 		{
-			name: "Test download into memory with a valid URL",
+			name: "Case 1: valid URL",
 			url:  "https://github.com/openshift/odo/blob/master/tests/examples/source/devfiles/nodejs/devfile.yaml",
 			want: true,
 		},
 		{
-			name: "Test download into memory with an invalid URL",
+			name: "Case 2: invalid URL",
 			url:  "https://this/is/not/a/valid/url",
 			want: false,
 		},
@@ -1713,6 +1713,61 @@ func TestDownloadInMemory(t *testing.T) {
 
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := DownloadFileInMemory(tt.url)
+
+			got := err == nil
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Got: %v, want: %v", got, tt.want)
+				t.Logf("Error message is: %v", err)
+			}
+		})
+	}
+}
+
+func TestValidateDockerfile(t *testing.T) {
+	tests := []struct {
+		name string
+		path string
+		want bool
+	}{
+		{
+			name: "Case 1: valid Dockerfile",
+			path: filepath.Join("tests", "examples", "source", "dockerfiles", "Dockerfile"),
+			want: true,
+		},
+		{
+			name: "Case 2: valid Dockerfile with comment",
+			path: filepath.Join("tests", "examples", "source", "dockerfiles", "DockerfileWithComment"),
+			want: true,
+		},
+		{
+			name: "Case 3: valid Dockerfile with whitespace",
+			path: filepath.Join("tests", "examples", "source", "dockerfiles", "DockerfileWithWhitespace"),
+			want: true,
+		},
+		{
+			name: "Case 4: invalid Dockerfile with missing FROM",
+			path: filepath.Join("tests", "examples", "source", "dockerfiles", "DockerfileInvalid"),
+			want: false,
+		},
+		{
+			name: "Case 5: invalid Dockerfile with entry before FROM",
+			path: filepath.Join("tests", "examples", "source", "dockerfiles", "DockerfileInvalidFROM"),
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Get path for this file (util_test)
+			_, filename, _, _ := runtime.Caller(0)
+			// Read the file using a path relative to this file
+			content, err := ioutil.ReadFile(filepath.Join(filename, "..", "..", "..", tt.path))
+			if err != nil {
+				t.Error("Error when reading the dockerfile: ", err)
+			}
+
+			err = ValidateDockerfile(content)
 
 			got := err == nil
 

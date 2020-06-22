@@ -67,19 +67,25 @@ func (do *DeployOptions) Complete(name string, cmd *cobra.Command, args []string
 
 // Validate validates the push parameters
 func (do *DeployOptions) Validate() (err error) {
+
+	// Validate the --tag
+	if do.tag == "" {
+		return errors.New("odo deploy requires a tag, in the format <registry>/namespace>/<image>")
+	}
 	var splitTag = strings.Split(do.tag, "/")
 	if len(splitTag) != 3 {
 		return errors.New("invalid tag: odo deploy reguires a tag in the format <registry>/namespace>/<image>")
 	}
 
-	characterMatch := regexp.MustCompile(`[a-zA-Z0-9\.\-:]*`)
-
+	// Valid characters for the registry, namespace, and image name
+	characterMatch := regexp.MustCompile(`[a-zA-Z0-9\.\-:_]*`)
 	for _, element := range splitTag {
 		elementMatch := characterMatch.MatchString(element)
 		if !elementMatch {
-			return errors.New("invalid tag: " + element + " in the tag contains an illegal character. It must only contain alphanumerical values, periods, colons, and dashes.")
+			return errors.New("invalid tag: " + element + " in the tag contains an illegal character. It must only contain alphanumerical values, periods, colons, underscores, and dashes.")
 		}
-		if strings.HasSuffix(element, ".") || strings.HasSuffix(element, "-") || strings.HasSuffix(element, ":") {
+		// The registry, namespace, and image, cannot end in '.', '-', '_',or ':'
+		if strings.HasSuffix(element, ".") || strings.HasSuffix(element, "-") || strings.HasSuffix(element, ":") || strings.HasSuffix(element, "_") {
 			return errors.New("invalid tag: " + element + " in the tag has an invalid final character. It must end in an alphanumeric value.")
 		}
 	}
@@ -124,18 +130,14 @@ func (do *DeployOptions) Run() (err error) {
 		if err != nil {
 			return errors.New("unable to download Dockerfile from URL specified in devfile")
 		}
+		// If we successfully downloaded the Dockerfile into memory, store it in the DeployOptions
 		do.DockerfileURL = dockerfileURL
 		do.DockerfileBytes = dockerfileBytes
 
-		dockerfileStrings := strings.Split(string(dockerfileBytes), "\n")
-		for _, line := range dockerfileStrings {
-			if strings.HasPrefix(line, "#") {
-				continue
-			}
-			if strings.HasPrefix(line, "FROM") {
-				break
-			}
-			return errors.Errorf("%s does not point to a valid Dockerfile", dockerfileURL)
+		// Validate the file that was downloaded is a Dockerfile
+		err = util.ValidateDockerfile(dockerfileBytes)
+		if err != nil {
+			return err
 		}
 
 	} else if !util.CheckPathExists(filepath.Join(localDir, "Dockerfile")) {

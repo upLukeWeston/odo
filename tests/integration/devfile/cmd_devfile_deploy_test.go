@@ -42,7 +42,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 		os.Unsetenv("GLOBALODOCONFIG")
 	})
 
-	Context("Verify dockerfile specified in devfile field points to valid Dockerfile", func() {
+	Context("Verify deploy completes when passing a valid Dockerfile URL from the devfile", func() {
 		It("Should succesfully download the dockerfile and build the project", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
 			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
@@ -53,7 +53,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 		})
 	})
 
-	Context("Verify error when dockerfile specified in devfile field points to a file that isn't a Dockerfile", func() {
+	Context("Verify error when dockerfile specified in devfile field doesn't point to a valid Dockerfile", func() {
 		It("Should error out with 'URL does not point to a valid Dockerfile'", func() {
 			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
 			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
@@ -73,16 +73,6 @@ var _ = Describe("odo devfile deploy command tests", func() {
 			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
 			cmdOutput := helper.CmdShouldFail("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")
 			Expect(cmdOutput).To(ContainSubstring("dockerfile required for build. No 'dockerfile' field found in devfile, or Dockerfile found in project directory"))
-		})
-	})
-
-	Context("Verify warning when Dockerfile is present in the project directory and has been specified in the Devfile", func() {
-		It("Should build the project using the Dockerfile specified in the devfile", func() {
-			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
-			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
-			helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
-			helper.CmdShouldPass("touch", "Dockerfile")
-			helper.CmdShouldPass("odo", "deploy", "--tag", imageTag, "--devfile", "devfile.yaml")
 		})
 	})
 })
