@@ -31,7 +31,7 @@ type Adapter struct {
 	common.AdapterContext
 }
 
-// SyncsFilesBuild sync the local files to build container volume
+// SyncFilesBuild sync the local files to build container volume
 func (a Adapter) SyncFilesBuild(buildParameters common.BuildParameters, compInfo common.ComponentInfo) (syncFolder string, err error) {
 
 	// If we want to ignore any files
@@ -44,10 +44,8 @@ func (a Adapter) SyncFilesBuild(buildParameters common.BuildParameters, compInfo
 	syncFolder = "/projects"
 
 	s = log.Spinner("Checking files for deploy")
-	// run the indexer and find the modified/added/deleted/renamed files
-	files, _, err := util.RunIndexer(buildParameters.Path, absIgnoreRules)
-	// TODO just get all the files that obey to the absIgnoreRules (.odo, blah)
-
+	// run the indexer and find the project source files
+	files, err := util.DeployRunIndexer(buildParameters.Path, absIgnoreRules)
 	if len(files) > 0 {
 		klog.V(4).Infof("Copying files %s to pod", strings.Join(files, " "))
 		dockerfile := map[string][]byte{
