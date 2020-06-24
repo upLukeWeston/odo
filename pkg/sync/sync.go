@@ -86,9 +86,6 @@ func checkFileExist(fileName string) bool {
 
 // makeTar function is copied from https://github.com/kubernetes/kubernetes/blob/master/pkg/kubectl/cmd/cp.go#L309
 // srcPath is ignored if files is set
-// makeTar returns a pointer to the tar.Writer, and doesn't close it during this function. The close is called outside
-// because in the case for copying source files, additional files are required to be written to it after this function has
-// already returned - meaning we can no longer defer the Close.
 func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExps []string, tarWriter *tar.Writer) error {
 	// TODO: use compression here?
 
