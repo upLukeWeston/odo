@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	devfileParser "github.com/openshift/odo/pkg/devfile/parser"
 	"github.com/openshift/odo/pkg/envinfo"
@@ -72,22 +70,10 @@ func (do *DeployOptions) Validate() (err error) {
 	if do.tag == "" {
 		return errors.New("odo deploy requires a tag, in the format <registry>/namespace>/<image>")
 	}
-	var splitTag = strings.Split(do.tag, "/")
-	if len(splitTag) != 3 {
-		return errors.New("invalid tag: odo deploy reguires a tag in the format <registry>/namespace>/<image>")
-	}
 
-	// Valid characters for the registry, namespace, and image name
-	characterMatch := regexp.MustCompile(`[a-zA-Z0-9\.\-:_]*`)
-	for _, element := range splitTag {
-		elementMatch := characterMatch.MatchString(element)
-		if !elementMatch {
-			return errors.New("invalid tag: " + element + " in the tag contains an illegal character. It must only contain alphanumerical values, periods, colons, underscores, and dashes.")
-		}
-		// The registry, namespace, and image, cannot end in '.', '-', '_',or ':'
-		if strings.HasSuffix(element, ".") || strings.HasSuffix(element, "-") || strings.HasSuffix(element, ":") || strings.HasSuffix(element, "_") {
-			return errors.New("invalid tag: " + element + " in the tag has an invalid final character. It must end in an alphanumeric value.")
-		}
+	err := util.ValidateTag(do.tag)
+	if err != nil {
+		return err
 	}
 
 	return
@@ -131,7 +117,6 @@ func (do *DeployOptions) Run() (err error) {
 			return errors.New("unable to download Dockerfile from URL specified in devfile")
 		}
 		// If we successfully downloaded the Dockerfile into memory, store it in the DeployOptions
-		do.DockerfileURL = dockerfileURL
 		do.DockerfileBytes = dockerfileBytes
 
 		// Validate the file that was downloaded is a Dockerfile

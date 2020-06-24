@@ -37,18 +37,17 @@ func CopyFile(client SyncClient, localPath string, compInfo common.ComponentInfo
 	go func() {
 		defer writer.Close()
 
-		tarWriter, err := makeTar(localPath, dest, writer, copyFiles, globExps)
+		tarWriter := tar.NewWriter(writer)
+
+		err := makeTar(localPath, dest, writer, copyFiles, globExps, tarWriter)
 		if err != nil {
 			log.Errorf("Error while creating tar: %#v", err)
 			os.Exit(1)
 		}
 
-		// if the tar.Writer that was returned by makeTar is empty, declare a new one
-		if tarWriter == nil {
-			tarWriter = tar.NewWriter(writer)
-		}
-
 		// For each of the files passed, write them to the tar.Writer
+		// No files can be passed, but if any are, they will be bundled up in the
+		// tar as well.
 		for name, content := range copyBytes {
 			hdr := &tar.Header{
 				Name: name,
@@ -90,9 +89,9 @@ func checkFileExist(fileName string) bool {
 // makeTar returns a pointer to the tar.Writer, and doesn't close it during this function. The close is called outside
 // because in the case for copying source files, additional files are required to be written to it after this function has
 // already returned - meaning we can no longer defer the Close.
-func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExps []string) (*tar.Writer, error) {
+func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExps []string, tarWriter *tar.Writer) error {
 	// TODO: use compression here?
-	tarWriter := tar.NewWriter(writer)
+
 	srcPath = filepath.Clean(srcPath)
 
 	// "ToSlash" is used as all containers within OpenShift are Linux based
@@ -112,7 +111,7 @@ func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExp
 				// 'odo push --context foobar' instead of 'odo push --context ~/foobar' it will NOT work..
 				fileAbsolutePath, err := util.GetAbsPath(fileName)
 				if err != nil {
-					return tarWriter, err
+					return err
 				}
 				klog.V(4).Infof("Got abs path: %s", fileAbsolutePath)
 				klog.V(4).Infof("Making %s relative to %s", srcPath, fileAbsolutePath)
@@ -121,7 +120,7 @@ func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExp
 				// we get the relative path by joining the two
 				destFile, err := filepath.Rel(filepath.FromSlash(srcPath), filepath.FromSlash(fileAbsolutePath))
 				if err != nil {
-					return tarWriter, err
+					return err
 				}
 
 				// Now we get the source file and join it to the base directory.
@@ -133,15 +132,15 @@ func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExp
 				// The file could be a regular file or even a folder, so use recursiveTar which handles symlinks, regular files and folders
 				err = recursiveTar(filepath.Dir(srcPath), srcFile, filepath.Dir(destPath), destFile, tarWriter, globExps)
 				if err != nil {
-					return tarWriter, err
+					return err
 				}
 			}
 		}
 	} else {
-		return tarWriter, recursiveTar(filepath.Dir(srcPath), filepath.Base(srcPath), filepath.Dir(destPath), "", tarWriter, globExps)
+		return recursiveTar(filepath.Dir(srcPath), filepath.Base(srcPath), filepath.Dir(destPath), "", tarWriter, globExps)
 	}
 
-	return tarWriter, nil
+	return nil
 }
 
 // recursiveTar function is copied from https://github.com/kubernetes/kubernetes/blob/master/pkg/kubectl/cmd/cp.go#L319

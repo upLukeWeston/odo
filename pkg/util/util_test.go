@@ -1778,3 +1778,80 @@ func TestValidateDockerfile(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateTag(t *testing.T) {
+	tests := []struct {
+		name string
+		tag  string
+		want bool
+	}{
+		{
+			name: "Case 1: Valid tag ",
+			tag:  "image-registry.openshift-image-registry.svc:5000/default/my-nodejs:1.0",
+			want: true,
+		},
+		{
+			name: "Case 2: Invalid tag with trailing period",
+			tag:  "image-registry.openshift-image-registry.svc:5000./default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 3: Invalid tag with trailing dash",
+			tag:  "image-registry.openshift-image-registry.svc:5000-/default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 4: Invalid tag with trailing underscore",
+			tag:  "image-registry.openshift-image-registry.svc:5000_/default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 5: Invalid tag with trailing colon",
+			tag:  "image-registry.openshift-image-registry.svc:5000:/default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 6: Invalid tag with invalid characters",
+			tag:  "imag|||\\e-registry.openshift&^%-image-registry.svc:5000/default!/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 7: Missing registry",
+			tag:  "/default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 8: Missing namespace",
+			tag:  "image-registry.openshift-image-registry.svc:5000//my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 9: Missing image",
+			tag:  "image-registry.openshift-image-registry.svc:5000/default/",
+			want: false,
+		},
+		{
+			name: "Case 10: Too many /'s",
+			tag:  "image-registry.openshift/image-registry.svc:5000:/default/my-nodejs:1.0",
+			want: false,
+		},
+		{
+			name: "Case 11: Too few /'s",
+			tag:  "image-registry.openshift-image-registry.svc:5000:/default-my-nodejs:1.0",
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateTag(tt.tag)
+
+			got := err == nil
+
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Got: %v, want: %v", got, tt.want)
+				t.Logf("Error message is: %v", err)
+			}
+		})
+	}
+}
