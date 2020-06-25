@@ -71,7 +71,7 @@ func (do *DeployOptions) Validate() (err error) {
 		return errors.New("odo deploy requires a tag, in the format <registry>/namespace>/<image>")
 	}
 
-	err := util.ValidateTag(do.tag)
+	err = util.ValidateTag(do.tag)
 	if err != nil {
 		return err
 	}

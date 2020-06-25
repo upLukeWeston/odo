@@ -39,7 +39,7 @@ func CopyFile(client SyncClient, localPath string, compInfo common.ComponentInfo
 
 		tarWriter := tar.NewWriter(writer)
 
-		err := makeTar(localPath, dest, writer, copyFiles, globExps, tarWriter)
+		err := makeTar(localPath, dest, copyFiles, globExps, tarWriter)
 		if err != nil {
 			log.Errorf("Error while creating tar: %#v", err)
 			os.Exit(1)
@@ -86,7 +86,7 @@ func checkFileExist(fileName string) bool {
 
 // makeTar function is copied from https://github.com/kubernetes/kubernetes/blob/master/pkg/kubectl/cmd/cp.go#L309
 // srcPath is ignored if files is set
-func makeTar(srcPath, destPath string, writer io.Writer, files []string, globExps []string, tarWriter *tar.Writer) error {
+func makeTar(srcPath, destPath string, files []string, globExps []string, tarWriter *tar.Writer) error {
 	// TODO: use compression here?
 
 	srcPath = filepath.Clean(srcPath)
