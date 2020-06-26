@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -158,6 +160,17 @@ func (a Adapter) executeBuildAndPush(syncFolder string, imageTag string, compInf
 	return nil
 }
 
+func terminateBuildContainer(c chan os.Signal, a Adapter, labels map[string]string) {
+	_ = <-c
+
+	klog.V(4).Info("Build process interrupted, terminating container.")
+	err := a.Delete(labels)
+	if err == nil {
+		klog.V(4).Infof("Failed to delete build container for component with name: %s", a.ComponentName)
+	}
+	os.Exit(0)
+}
+
 // Build image for devfile project
 func (a Adapter) Build(parameters common.BuildParameters) (err error) {
 	containerName := a.ComponentName + "-container"
@@ -165,6 +178,10 @@ func (a Adapter) Build(parameters common.BuildParameters) (err error) {
 	labels := map[string]string{
 		"component": a.ComponentName,
 	}
+
+	channel := make(chan os.Signal)
+	signal.Notify(channel, os.Interrupt, syscall.SIGTERM)
+	go terminateBuildContainer(channel, a, labels)
 
 	err = a.createBuildDeployment(labels, buildContainer)
 	if err != nil {
@@ -177,7 +194,6 @@ func (a Adapter) Build(parameters common.BuildParameters) (err error) {
 		if err == nil {
 			err = errors.Wrapf(derr, "failed to delete build step for component with name: %s", a.ComponentName)
 		}
-
 	}()
 
 	_, err = a.Client.WaitForDeploymentRollout(a.ComponentName)
@@ -192,10 +208,10 @@ func (a Adapter) Build(parameters common.BuildParameters) (err error) {
 	}
 
 	// Need to wait for container to start
-	time.Sleep(10 * time.Second)
+	time.Sleep(5 * time.Second)
 
 	// Sync files to volume
-	log.Infof("\nSyncing to component %s", a.ComponentName)
+	klog.V(4).Infof("\nSyncing to component %s", a.ComponentName)
 	// Get a sync adapter. Check if project files have changed and sync accordingly
 	syncAdapter := sync.New(a.AdapterContext, &a.Client)
 	compInfo := common.ComponentInfo{
