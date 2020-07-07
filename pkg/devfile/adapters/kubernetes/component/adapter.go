@@ -84,7 +84,16 @@ func (a Adapter) runBuildConfig(client *occlient.Client, parameters common.Build
 		Name: buildName,
 	}
 
-	_, err = client.CreateDockerBuildConfigWithBinaryInput(commonObjectMeta, dockerfilePath, parameters.Tag, []corev1.EnvVar{})
+	buildOutput := "DockerImage"
+
+	if parameters.Tag == "" {
+		// TODO: set default to namepsace/tag (is default tag latest?)
+		// output info to the user
+		parameters.Tag = fmt.Sprintf("%s:latest", buildName)
+		buildOutput = "ImageStreamTag"
+	}
+
+	_, err = client.CreateDockerBuildConfigWithBinaryInput(commonObjectMeta, dockerfilePath, parameters.Tag, []corev1.EnvVar{}, buildOutput)
 	if err != nil {
 		return err
 	}
@@ -142,6 +151,7 @@ func (a Adapter) runBuildConfig(client *occlient.Client, parameters common.Build
 
 // Build image for devfile project
 func (a Adapter) Build(parameters common.BuildParameters) (err error) {
+	// TODO: set namespace from user flag
 	client, err := occlient.New()
 	if err != nil {
 		return err
@@ -250,6 +260,27 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	applicationName := a.ComponentName + "-deploy"
 	deploymentManifest := &unstructured.Unstructured{}
 
+	// oclient.GetImageStream(tag -> a.ComponentName)
+	// TODO: Can we use a occlient created somewhere else rather than create another
+	client, err := occlient.New()
+	if err != nil {
+		return err
+	}
+
+	if parameters.Tag == "" {
+		is, err := client.GetImageStream(namespace, a.ComponentName, "latest")
+		if err != nil {
+			return err
+		}
+
+		imageStreamImage, err := client.GetImageStreamImage(is, "latest")
+		if err != nil {
+			return err
+		}
+		parameters.Tag = imageStreamImage.Image.DockerImageReference
+
+	}
+
 	// Specify the substitution keys and values
 	yamlSubstitutions := map[string]string{
 		"CONTAINER_IMAGE": parameters.Tag,
@@ -356,12 +387,6 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	}
 
 	s := log.Spinner("Determining the application URL")
-
-	// TODO: Can we use a occlient created somewhere else rather than create another
-	client, err := occlient.New()
-	if err != nil {
-		return err
-	}
 
 	// Need to wait for a second to give the server time to create the artifacts
 	// TODO: Replace wait with a wait for object to be created

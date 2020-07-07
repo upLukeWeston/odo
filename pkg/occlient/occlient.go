@@ -3141,8 +3141,20 @@ func (c *Client) GetPVCFromName(pvcName string) (*corev1.PersistentVolumeClaim, 
 // as input a binary which contains a dockerfile at a specific location. It will build
 // the source with Dockerfile, and push the image using tag.
 // envVars is the array containing the environment variables
-func (c *Client) CreateDockerBuildConfigWithBinaryInput(commonObjectMeta metav1.ObjectMeta, dockerfilePath string, outputImageTag string, envVars []corev1.EnvVar) (bc buildv1.BuildConfig, err error) {
-	bc = generateDockerBuildConfigWithBinaryInput(commonObjectMeta, dockerfilePath, outputImageTag)
+func (c *Client) CreateDockerBuildConfigWithBinaryInput(commonObjectMeta metav1.ObjectMeta, dockerfilePath string, outputImageTag string, envVars []corev1.EnvVar, outputType string) (bc buildv1.BuildConfig, err error) {
+	// generate and create ImageStream
+	is := imagev1.ImageStream{
+		ObjectMeta: commonObjectMeta,
+	}
+
+	if !isTagInImageStream(is, outputImageTag) {
+		_, err = c.imageClient.ImageStreams(c.Namespace).Create(&is)
+		if err != nil {
+			return bc, errors.Wrapf(err, "unable to create ImageStream for %s", commonObjectMeta.Name)
+		}
+	}
+
+	bc = generateDockerBuildConfigWithBinaryInput(commonObjectMeta, dockerfilePath, outputImageTag, outputType)
 
 	if len(envVars) > 0 {
 		bc.Spec.Strategy.SourceStrategy.Env = envVars

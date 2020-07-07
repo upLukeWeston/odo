@@ -132,4 +132,17 @@ var _ = Describe("odo devfile deploy command tests", func() {
 			Expect(cmdOutput).To(ContainSubstring(fmt.Sprintf("Successfully deployed component: http://%s-deploy-%s", cmpName, namespace)))
 		})
 	})
+
+	Context("Verify the deploy completes on openshift with no tag provided", func() {
+		It("Should successfully deploy the application", func() {
+			helper.CmdShouldPass("odo", "create", "nodejs", "--project", namespace, cmpName)
+			helper.CmdShouldPass("odo", "url", "create", "--port", "3000")
+			helper.CopyExampleDevFile(filepath.Join("source", "devfilesV2", "nodejs", "devfile.yaml"), filepath.Join(context, "devfile.yaml"))
+			cmdOutput := helper.CmdShouldPass("odo", "deploy")
+			Expect(cmdOutput).To(ContainSubstring(fmt.Sprintf("Successfully deployed component: http://%s-deploy-%s", cmpName, namespace)))
+
+			output := cliRunner.GetServices(namespace)
+			Expect(output).To(ContainSubstring(cmpName + "-deploy"))
+		})
+	})
 })
