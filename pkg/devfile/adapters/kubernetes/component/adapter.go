@@ -157,6 +157,10 @@ func (a Adapter) runBuildConfig(client *occlient.Client, parameters common.Build
 	return
 }
 
+// terminateBuild is triggered if the user performs a ^C action within the terminal during the build phase
+// of the deploy.
+// It cleans up the resources created for the build, as the defer function would not be reached.
+// The subsequent deploy would fail if these resources are not cleaned up.
 func (a Adapter) terminateBuild(c chan os.Signal, client *occlient.Client, commonObjectMeta metav1.ObjectMeta) {
 	_ = <-c
 
