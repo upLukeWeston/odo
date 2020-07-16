@@ -3410,3 +3410,9 @@ func (c *Client) isResourceSupported(apiGroup, apiVersion, resourceName string) 
 	}
 	return false, nil
 }
+
+// UpdateImageStreamOwnerReference
+func (c *Client) UpdateImageStream(imageStream *imagev1.ImageStream) (err error) {
+	_, err = c.imageClient.ImageStreams(c.Namespace).Update(imageStream)
+	return
+}

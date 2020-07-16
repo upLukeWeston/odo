@@ -90,8 +90,6 @@ func (a Adapter) runBuildConfig(client *occlient.Client, parameters common.Build
 	buildOutput := "DockerImage"
 
 	if parameters.Tag == "" {
-		// TODO: set default to namepsace/tag (is default tag latest?)
-		// output info to the user
 		parameters.Tag = fmt.Sprintf("%s:latest", buildName)
 		buildOutput = "ImageStreamTag"
 	}
@@ -164,6 +162,7 @@ func (a Adapter) runBuildConfig(client *occlient.Client, parameters common.Build
 	s.End(true)
 	// Stop listening for a ^C so it doesnt perform terminateBuild during any later stages
 	signal.Stop(controlC)
+	log.Successf("Successfully built container image: %s", parameters.Tag)
 	return
 }
 
@@ -439,7 +438,8 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	s := log.Spinner("Determining the application URL")
 
 	// Need to wait for a second to give the server time to create the artifacts
-	// TODO: Replace wait with a wait for object to be created
+	// TODO: Replace wait with a wait for object to be created correctly
+	// Check the status of the container
 	time.Sleep(2 * time.Second)
 
 	fullURL := ""
