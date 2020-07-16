@@ -738,6 +738,7 @@ func isTagInImageStream(is imagev1.ImageStream, imageTag string) bool {
 // imagestream of required tag not found in current namespace, then searches openshift namespace.
 // If not found, error out. If imageNS is not empty string, then, the requested imageNS only is searched
 // for requested imagestream
+// if imageTag is empty string, then do not check for tag in the imagestream.
 func (c *Client) GetImageStream(imageNS string, imageName string, imageTag string) (*imagev1.ImageStream, error) {
 	var err error
 	var imageStream *imagev1.ImageStream
@@ -761,7 +762,7 @@ func (c *Client) GetImageStream(imageNS string, imageName string, imageTag strin
 		currentNSImageStream, e := c.imageClient.ImageStreams(currentProjectName).Get(imageName, metav1.GetOptions{})
 		if e != nil {
 			err = errors.Wrapf(e, "no match found for : %s in namespace %s", imageName, currentProjectName)
-		} else {
+		} else if imageTag != "" {
 			if isTagInImageStream(*currentNSImageStream, imageTag) {
 				return currentNSImageStream, nil
 			}
@@ -772,7 +773,7 @@ func (c *Client) GetImageStream(imageNS string, imageName string, imageTag strin
 		if e != nil {
 			// The image is not available in current Namespace.
 			err = errors.Wrapf(e, "no match found for : %s in namespace %s", imageName, OpenShiftNameSpace)
-		} else {
+		} else if imageTag != "" {
 			if isTagInImageStream(*openshiftNSImageStream, imageTag) {
 				return openshiftNSImageStream, nil
 			}
@@ -797,8 +798,11 @@ func (c *Client) GetImageStream(imageNS string, imageName string, imageTag strin
 			err, "no match found for %s in namespace %s", imageName, imageNS,
 		)
 	}
-	if !isTagInImageStream(*imageStream, imageTag) {
-		return nil, fmt.Errorf("image stream %s with tag %s not found in %s namespaces", imageName, imageTag, currentProjectName)
+
+	if imageTag != "" {
+		if !isTagInImageStream(*imageStream, imageTag) {
+			return nil, fmt.Errorf("image stream %s with tag %s not found in %s namespaces", imageName, imageTag, currentProjectName)
+		}
 	}
 
 	return imageStream, nil
@@ -3142,13 +3146,15 @@ func (c *Client) GetPVCFromName(pvcName string) (*corev1.PersistentVolumeClaim, 
 // the source with Dockerfile, and push the image using tag.
 // envVars is the array containing the environment variables
 func (c *Client) CreateDockerBuildConfigWithBinaryInput(commonObjectMeta metav1.ObjectMeta, dockerfilePath string, outputImageTag string, envVars []corev1.EnvVar, outputType string) (bc buildv1.BuildConfig, err error) {
-	// generate and create ImageStream
-	is := imagev1.ImageStream{
-		ObjectMeta: commonObjectMeta,
-	}
+	// generate and create ImageStream if not present
 
-	if !isTagInImageStream(is, outputImageTag) {
-		_, err = c.imageClient.ImageStreams(c.Namespace).Create(&is)
+	var imageStream *imagev1.ImageStream
+	if imageStream, err = c.GetImageStream(c.Namespace, commonObjectMeta.Name, ""); err != nil || imageStream == nil {
+		imageStream = &imagev1.ImageStream{
+			ObjectMeta: commonObjectMeta,
+		}
+
+		_, err = c.imageClient.ImageStreams(c.Namespace).Create(imageStream)
 		if err != nil {
 			return bc, errors.Wrapf(err, "unable to create ImageStream for %s", commonObjectMeta.Name)
 		}
