@@ -15,6 +15,7 @@ var _ = Describe("odo devfile deploy command tests", func() {
 	var namespace, context, cmpName, currentWorkingDirectory, originalKubeconfig, imageTag string
 	// Using program commmand according to cliRunner in devfile
 	cliRunner := helper.GetCliRunner()
+	oc := helper.NewOcRunner("oc")
 
 	// This is run after every Spec (It)
 	var _ = BeforeEach(func() {
@@ -172,6 +173,9 @@ var _ = Describe("odo devfile deploy command tests", func() {
 
 			output := cliRunner.GetServices(namespace)
 			Expect(output).To(ContainSubstring(cmpName + "-deploy"))
+
+			ok := oc.CheckForImageStream(cmpName, "latest")
+			Expect(ok).To(BeTrue())
 		})
 	})
 })
