@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
 
 	"github.com/openshift/odo/pkg/exec"
@@ -34,18 +35,16 @@ import (
 	"github.com/openshift/odo/pkg/devfile/adapters/kubernetes/storage"
 	"github.com/openshift/odo/pkg/devfile/adapters/kubernetes/utils"
 	versionsCommon "github.com/openshift/odo/pkg/devfile/parser/data/common"
-	"github.com/openshift/odo/pkg/envinfo"
 	"github.com/openshift/odo/pkg/kclient"
 	"github.com/openshift/odo/pkg/log"
 	"github.com/openshift/odo/pkg/machineoutput"
 	"github.com/openshift/odo/pkg/occlient"
 	odoutil "github.com/openshift/odo/pkg/odo/util"
 	"github.com/openshift/odo/pkg/sync"
-	"github.com/openshift/odo/pkg/url"
 )
 
 const (
-	DeployWaitTimeout = 60 * time.Second
+	DeployComponentSuffix = "-deploy"
 )
 
 // New instantiantes a component adapter
@@ -201,103 +200,37 @@ func (a Adapter) Build(parameters common.BuildParameters) (err error) {
 	return errors.New("unable to build image, only Openshift BuildConfig build is supported")
 }
 
-func determinePort(envSpecificInfo envinfo.EnvSpecificInfo) string {
-	// Determine port to use from first non-Docker route in env.yaml)
-	deploymentPort := ""
-	for _, localURL := range envSpecificInfo.GetURL() {
-		if localURL.Kind != envinfo.DOCKER {
-			deploymentPort = strconv.Itoa(localURL.Port)
-			break
-		}
-	}
-	return deploymentPort
-}
-
-func substitueYamlVariables(baseYaml []byte, yamlSubstitutions map[string]string) []byte {
-	// TODO: Provide a better way to do the substitution in the manifest file(s)
-	for key, value := range yamlSubstitutions {
-		if value != "" && bytes.Contains(baseYaml, []byte(key)) {
-			klog.V(3).Infof("Replacing %s with %s", key, value)
-			tempYaml := bytes.ReplaceAll(baseYaml, []byte(key), []byte(value))
-			baseYaml = tempYaml
-		}
-	}
-	return baseYaml
-}
-
-func getNamedCondition(route *unstructured.Unstructured, conditionTypeValue string) map[string]interface{} {
-	status := route.UnstructuredContent()["status"].(map[string]interface{})
-	conditions := status["conditions"].([]interface{})
-	for i := range conditions {
-		c := conditions[i].(map[string]interface{})
-		klog.V(4).Infof("Condition returned\n%s\n", c)
-		if c["type"] == conditionTypeValue {
-			return c
-		}
-	}
-	return nil
-}
-
-// TODO: Create a function to wait for deploment completion of any unstructured object
-func (a Adapter) waitForManifestDeployCompletion(applicationName string, gvr schema.GroupVersionResource, conditionTypeValue string) (*unstructured.Unstructured, error) {
-	klog.V(4).Infof("Waiting for %s manifest deployment completion", applicationName)
-	w, err := a.Client.DynamicClient.Resource(gvr).Namespace(a.Client.Namespace).Watch(metav1.ListOptions{FieldSelector: "metadata.name=" + applicationName})
+// Perform the substitutions in the manifest file(s)
+func substitueYamlVariables(baseYaml []byte, yamlSubstitutions map[string]string) ([]byte, error) {
+	// create new template from parsing file
+	tmpl, err := template.New("deploy").Parse(string(baseYaml))
 	if err != nil {
-		return nil, errors.Wrapf(err, "unable to watch deployment")
+		return []byte{}, errors.Wrap(err, "error creating template")
 	}
-	defer w.Stop()
-	success := make(chan *unstructured.Unstructured)
-	failure := make(chan error)
 
-	go func() {
-		defer close(success)
-		defer close(failure)
+	// define a buffer to store the results
+	var buf bytes.Buffer
 
-		for {
-			val, ok := <-w.ResultChan()
-			if !ok {
-				failure <- errors.New("watch channel was closed")
-				return
-			}
-			if watchObject, ok := val.Object.(*unstructured.Unstructured); ok {
-				// TODO: Add more details on what to check to see if object deployment is complete
-				// Currently only checks to see if status.conditions[] contains a condition with type = conditionTypeValue
-				condition := getNamedCondition(watchObject, conditionTypeValue)
-				if condition != nil {
-					if condition["status"] == "Fail" {
-						failure <- fmt.Errorf("manifest deployment %s failed", applicationName)
-						return
-					} else if condition["status"] == "True" {
-						success <- watchObject
-						return
-					}
-				}
-			}
-		}
-	}()
-
-	select {
-	case val := <-success:
-		return val, nil
-	case err := <-failure:
-		return nil, err
-	case <-time.After(DeployWaitTimeout):
-		return nil, errors.Errorf("timeout while waiting for %s manifest deployment completion", applicationName)
+	// apply template to yaml file
+	_ = tmpl.Execute(&buf, yamlSubstitutions)
+	if err != nil {
+		return []byte{}, errors.Wrap(err, "error executing template")
 	}
+
+	return buf.Bytes(), nil
 }
 
 // Build image for devfile project
 func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
-	namespace := a.Client.Namespace
-	applicationName := a.ComponentName + "-deploy"
-	deploymentManifest := &unstructured.Unstructured{}
-
-	// oclient.GetImageStream(tag -> a.ComponentName)
 	// TODO: Can we use a occlient created somewhere else rather than create another
 	client, err := occlient.New()
 	if err != nil {
 		return err
 	}
+
+	namespace := a.Client.Namespace
+	applicationName := a.ComponentName + DeployComponentSuffix
+	deploymentManifest := &unstructured.Unstructured{}
 
 	var imageStream *imagev1.ImageStream
 	if parameters.Tag == "" {
@@ -317,7 +250,7 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	yamlSubstitutions := map[string]string{
 		"CONTAINER_IMAGE": parameters.Tag,
 		"COMPONENT_NAME":  applicationName,
-		"PORT":            determinePort(parameters.EnvSpecificInfo),
+		"PORT":            strconv.Itoa(parameters.DeploymentPort),
 	}
 
 	// Build a yaml decoder with the unstructured Scheme
@@ -342,14 +275,18 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	for _, manifest := range manifests {
 		if len(manifest) > 0 {
 			// Substitute the values in the manifest file
-			deployYaml := substitueYamlVariables(manifest, yamlSubstitutions)
+			deployYaml, err := substitueYamlVariables(manifest, yamlSubstitutions)
+			if err != nil {
+				return errors.Wrap(err, "unable to substitute variables in manifest")
+			}
 
 			_, gvk, err := yamlDecoder.Decode([]byte(deployYaml), nil, deploymentManifest)
 			if err != nil {
-				return errors.Wrap(err, "Failed to decode the manifest yaml")
+				return errors.New("Failed to decode the manifest yaml")
 			}
 
-			gvr := schema.GroupVersionResource{Group: gvk.Group, Version: gvk.Version, Resource: strings.ToLower(gvk.Kind + "s")}
+			kind := utils.PluraliseKind(gvk.Kind)
+			gvr := schema.GroupVersionResource{Group: gvk.Group, Version: gvk.Version, Resource: kind}
 			klog.V(3).Infof("Manifest type: %s", gvr.String())
 
 			labels := map[string]string{
@@ -378,7 +315,7 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 				// the manifest cannot have an empty `ClusterIP` defintion, so we need to copy this from the existing definition.
 				if item.GetKind() == "Service" {
 					currentServiceSpec := item.UnstructuredContent()["spec"].(map[string]interface{})
-					if currentServiceSpec["type"] == "ClusterIP" {
+					if currentServiceSpec["clusterIP"] != nil && currentServiceSpec["clusterIP"] != "" {
 						newService := deploymentManifest.UnstructuredContent()
 						newService["spec"].(map[string]interface{})["clusterIP"] = currentServiceSpec["clusterIP"]
 						deploymentManifest.SetUnstructuredContent(newService)
@@ -442,33 +379,14 @@ func (a Adapter) Deploy(parameters common.DeployParameters) (err error) {
 	// Check the status of the container
 	time.Sleep(2 * time.Second)
 
-	fullURL := ""
-	urlList, err := url.List(client, &config.LocalConfigInfo{}, "", applicationName)
+	labelSelector := fmt.Sprintf("%v=%v", "component", applicationName)
+	fullURL, err := client.GetApplicationURL(applicationName, labelSelector)
 	if err != nil {
 		s.End(false)
-		return errors.Wrapf(err, "Unable to determine URL for application %s", applicationName)
-	}
-	if len(urlList.Items) > 0 {
-		for _, url := range urlList.Items {
-			fullURL = fmt.Sprintf("%s://%s", url.Spec.Protocol, url.Spec.Host)
-		}
+		log.Errorf("Unable to determine the application URL for component %s: %s", a.ComponentName, err)
 	} else {
-		// No URL found - try looking for a knative Route therefore need to wait for Service and Route to be setup.
-		knGvr := schema.GroupVersionResource{Group: "serving.knative.dev", Version: "v1", Resource: "routes"}
-		route, err := a.waitForManifestDeployCompletion(applicationName, knGvr, "Ready")
-		if err != nil {
-			s.End(false)
-			return errors.Wrap(err, "error while waiting for deployment completion")
-		}
-		fullURL = route.UnstructuredContent()["status"].(map[string]interface{})["url"].(string)
-	}
-
-	if fullURL != "" {
 		s.End(true)
 		log.Successf("Successfully deployed component: %s", fullURL)
-	} else {
-		s.End(false)
-		log.Errorf("URL unable to be determined for component %s", a.ComponentName)
 	}
 
 	return nil
@@ -486,7 +404,8 @@ func (a Adapter) DeployDelete(manifest []byte) (err error) {
 				return err
 			}
 			klog.V(3).Infof("Deploy manifest:\n\n%s", deploymentManifest)
-			gvr := schema.GroupVersionResource{Group: gvk.Group, Version: gvk.Version, Resource: strings.ToLower(gvk.Kind + "s")}
+			kind := utils.PluraliseKind(gvk.Kind)
+			gvr := schema.GroupVersionResource{Group: gvk.Group, Version: gvk.Version, Resource: kind}
 			klog.V(3).Infof("Manifest type: %s", gvr.String())
 
 			_, err = a.Client.DynamicClient.Resource(gvr).Namespace(a.Client.Namespace).Get(deploymentManifest.GetName(), metav1.GetOptions{})

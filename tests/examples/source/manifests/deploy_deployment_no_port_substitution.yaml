@@ -19,7 +19,7 @@ spec:
           image: {{.CONTAINER_IMAGE}}
           ports:
             - name: http
-              containerPort: {{.PORT}}
+              containerPort: 3000
               protocol: TCP
 ---
 kind: Service
@@ -29,8 +29,8 @@ metadata:
 spec:
   ports:
     - protocol: TCP
-      port: {{.PORT}}
-      targetPort: {{.PORT}}
+      port: 3000
+      targetPort: 3000
   selector:
     app: {{.COMPONENT_NAME}}
   type: ClusterIP
@@ -48,5 +48,5 @@ spec:
     name: {{.COMPONENT_NAME}}
     weight: 100
   port:
-    targetPort: {{.PORT}}
+    targetPort: 3000
   wildcardPolicy: None

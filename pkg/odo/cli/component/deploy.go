@@ -1,6 +1,7 @@
 package component
 
 import (
+	"bytes"
 	"fmt"
 	"path/filepath"
 
@@ -43,6 +44,7 @@ type DeployOptions struct {
 	namespace       string
 	tag             string
 	ManifestSource  []byte
+	DeploymentPort  int
 
 	*genericclioptions.Context
 }
@@ -79,6 +81,7 @@ func (do *DeployOptions) Complete(name string, cmd *cobra.Command, args []string
 func (do *DeployOptions) Validate() (err error) {
 
 	log.Infof("\nValidation")
+
 	// Validate the --tag
 	s := log.Spinner("Validating arguments")
 
@@ -149,6 +152,18 @@ func (do *DeployOptions) Validate() (err error) {
 	}
 	do.ManifestSource = manifestBytes
 
+	// check if manifestSource contains {{.PORT}} template variable
+	// if it does, then check we have an port setup in env.yaml
+	do.DeploymentPort = 0
+	if bytes.Contains(manifestBytes, []byte("{{.PORT}}")) {
+		deploymentPort, err := do.EnvSpecificInfo.GetPortByURLKind(envinfo.ROUTE)
+		if err != nil {
+			s.End(false)
+			return errors.Wrap(err, "unable to find `port` for deployment. `odo url create` must be run prior to `odo deploy`")
+		}
+		do.DeploymentPort = deploymentPort
+	}
+
 	s.End(true)
 
 	return
@@ -189,7 +204,8 @@ func NewCmdDeploy(name, fullName string) *cobra.Command {
 	genericclioptions.AddContextFlag(deployCmd, &do.componentContext)
 
 	// enable devfile flag if experimental mode is enabled
-	deployCmd.Flags().StringVar(&do.tag, "tag", "", "Tag used to build the image")
+	deployCmd.Flags().StringVar(&do.tag, "tag", "", "Tag used to build the image.  In the format <registry>/namespace>/<image>")
+
 	deployCmd.Flags().StringSliceVar(&do.ignores, "ignore", []string{}, "Files or folders to be ignored via glob expressions.")
 
 	//Adding `--project` flag
